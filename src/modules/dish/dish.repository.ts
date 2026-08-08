@@ -1,4 +1,3 @@
-// src/modules/dish/dish.repository.ts
 import prisma from "../../config/prisma";
 
 class DishRepository {
