@@ -48,8 +48,8 @@ CANCELLED: dans le cas d'une commande annule par un user ou par le systeme
 - [x] Panier persistant (ajout, incrémentation automatique, modification, suppression)
       
 ##  Fonctionnalités a developper
-- [] Création de commande depuis le panier (transaction atomique, vérification anti-fraude des prix)
-- [] Machine à états des commandes avec autorisation par rôle (client/admin/livreur)
+- [ ] Création de commande depuis le panier (transaction atomique, vérification anti-fraude des prix)
+- [ ] Machine à états des commandes avec autorisation par rôle (client/admin/livreur)
 - [ ] Gestion de la livraison (assignation livreur, suivi)
 - [ ] Intégration paiement (MTN MoMo / Orange Money)
 - [ ] Frontend React
