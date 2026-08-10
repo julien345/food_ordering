@@ -54,6 +54,21 @@ class DishRepository {
   softDelete(id: string) {
     return prisma.dish.update({ where: { id }, data: { deletedAt: new Date() } });
   }
+
+  async findAllPaginated(skip: number, take: number) {
+    const [data, total] = await prisma.$transaction([
+      prisma.dish.findMany({
+        where: { deletedAt: null },
+        include: { category: true },
+        skip,
+        take,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.dish.count({ where: { deletedAt: null } }),
+    ]);
+
+    return { data, total };
+  }
 }
 
 export default new DishRepository();

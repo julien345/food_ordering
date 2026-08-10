@@ -1,4 +1,3 @@
-// src/modules/address/address.controller.ts
 import { Request, Response } from "express";
 import addressService from "./address.service";
 
@@ -11,18 +10,8 @@ class AddressController {
   }
 
   async getById(req: Request<AddressParams>, res: Response) {
-    try {
-      const address = await addressService.getById(req.params.id, req.user!.userId);
-      return res.status(200).json(address);
-    } catch (err: any) {
-      if (err.message === "ADDRESS_NOT_FOUND") {
-        return res.status(404).json({ error: "Adresse introuvable." });
-      }
-      if (err.message === "FORBIDDEN") {
-        return res.status(403).json({ error: "Accès refusé." });
-      }
-      return res.status(500).json({ error: "Erreur serveur." });
-    }
+    const address = await addressService.getById(req.params.id, req.user!.userId);
+    return res.status(200).json(address);
   }
 
   async create(req: Request, res: Response) {
@@ -31,33 +20,13 @@ class AddressController {
   }
 
   async update(req: Request<AddressParams>, res: Response) {
-    try {
-      const address = await addressService.update(req.params.id, req.user!.userId, req.body);
-      return res.status(200).json(address);
-    } catch (err: any) {
-      if (err.message === "ADDRESS_NOT_FOUND") {
-        return res.status(404).json({ error: "Adresse introuvable." });
-      }
-      if (err.message === "FORBIDDEN") {
-        return res.status(403).json({ error: "Accès refusé." });
-      }
-      return res.status(500).json({ error: "Erreur serveur." });
-    }
+    const address = await addressService.update(req.params.id, req.user!.userId, req.body);
+    return res.status(200).json(address);
   }
 
   async remove(req: Request<AddressParams>, res: Response) {
-    try {
-      await addressService.remove(req.params.id, req.user!.userId);
-      return res.status(204).send();
-    } catch (err: any) {
-      if (err.message === "ADDRESS_NOT_FOUND") {
-        return res.status(404).json({ error: "Adresse introuvable." });
-      }
-      if (err.message === "FORBIDDEN") {
-        return res.status(403).json({ error: "Accès refusé." });
-      }
-      return res.status(500).json({ error: "Erreur serveur." });
-    }
+    await addressService.remove(req.params.id, req.user!.userId);
+    return res.status(204).send();
   }
 }
 

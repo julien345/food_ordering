@@ -1,13 +1,15 @@
-// src/modules/auth/auth.routes.ts
 import { Router } from "express";
-import  authController  from "./auth.controller";
+import authController from "./auth.controller";
+import { requireAuth } from "../../middlewares/auth.middleware";
 import { validate } from "../../middlewares/validate.middleware";
 import { registerSchema, loginSchema } from "../../validators/auth.validator";
-import { requireAuth } from "../../middlewares/auth.middleware";
+import { asyncHandler } from "../../utils/asyncHandler";
+
 const router = Router();
 
-router.post("/register", validate(registerSchema), authController.register);
-router.post("/login", validate(loginSchema), authController.login);
-router.post("/refresh", authController.refresh);
-router.get("/me", requireAuth, authController.me);
+router.post("/register", validate(registerSchema), asyncHandler(authController.register.bind(authController)));
+router.post("/login", validate(loginSchema), asyncHandler(authController.login.bind(authController)));
+router.post("/refresh", asyncHandler(authController.refresh.bind(authController)));
+router.get("/me", requireAuth, asyncHandler(authController.me.bind(authController)));
+
 export default router;

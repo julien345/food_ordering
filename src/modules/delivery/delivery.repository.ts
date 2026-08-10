@@ -1,4 +1,3 @@
-// src/modules/delivery/delivery.repository.ts
 import prisma from "../../config/prisma";
 
 class DeliveryRepository {
