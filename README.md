@@ -1,95 +1,132 @@
 # 🍽️ Food Ordering App — Backend
 
-Backend d'une application de commande et livraison de nourriture (single restaurant), développé comme projet portfolio dans le cadre d'une reconversion vers l'ingénierie DevOps. Le projet sert de socle applicatif réel pour démontrer une chaîne complète : conception d'API robuste → conteneurisation → CI/CD → orchestration Kubernetes → monitoring.
+Backend for a food ordering and delivery application, built as a portfolio project as part of a career transition into DevOps engineering. The project serves as a real application layer to demonstrate a full chain: robust API design → containerization → CI/CD → Kubernetes orchestration → monitoring.
 
-## 🎯 Objectif du projet
+*[Lire en français](./README.fr.md)*
 
-Construire une application fullstack complète en trois phases :
-1. **Backend** (Node.js/TypeScript) — API REST sécurisée et modulaire
-2. **Frontend** (React) — interface client et dashboard admin
-3. **DevOps** — Docker, CI/CD, déploiement k3s, monitoring
+## 🎯 Project goal
 
-## 🛠️ Stack technique
+Build a complete fullstack application in three phases:
+1. **Backend** (Node.js/TypeScript) — secure, modular REST API
+2. **Frontend** (React) — client interface and admin dashboard
+3. **DevOps** — Docker, CI/CD, k3s deployment, monitoring
 
-- **Runtime** : Node.js + TypeScript
-- **Framework** : Express
-- **ORM** : Prisma v7 (`prisma.config.ts` + `@prisma/adapter-pg`)
-- **Base de données** : PostgreSQL
-- **Validation** : Zod v4
-- **Authentification** : JWT (access token 15min / refresh token 7 jours), bcrypt
+## 🛠️ Tech stack
+
+- **Runtime**: Node.js + TypeScript
+- **Framework**: Express
+- **ORM**: Prisma v7 (`prisma.config.ts` + `@prisma/adapter-pg`)
+- **Database**: PostgreSQL
+- **Validation**: Zod v4
+- **Authentication**: JWT (15min access token / 7-day refresh token), bcrypt
 
 ## 🏗️ Architecture
 
-Architecture en couches strictes, appliquée à tous les modules :
-- **Routes** : définition des endpoints et middlewares (auth, rôles, validation)
-- **Controllers** : gestion HTTP (req/res, codes de statut), aucune logique métier
-- **Services** : logique métier, règles de validation, orchestration
-- **Repository** : unique point de contact avec Prisma/la base de données
+Strict layered architecture, applied across all modules:
 
-Chaque couche est implémentée en **classes TypeScript**, exportées en singleton (`export default new XxxClass()`).
+```
+routes → controllers → services → repository
+```
 
-## 📊 Modèle de données
+- **Routes**: endpoint definitions, middlewares (auth, roles, validation)
+- **Controllers**: HTTP handling (req/res, status codes), no business logic
+- **Services**: business logic, validation rules, orchestration
+- **Repository**: sole point of contact with Prisma/the database
 
-10 entités : `User`, `Category`, `Dish`, `Cart`, `CartItem`, `Order`, `OrderItem`, `Payment`, `Delivery`, `Address`.
+Each layer is implemented as **TypeScript classes**, exported as singletons (`export default new XxxClass()`).
 
-- **Soft delete** (`deletedAt: null`) sur `User`, `Category`, `Dish`, `Address` — préserve l'intégrité de l'historique des commandes passées
-- **Panier persistant côté serveur**, créé automatiquement à l'inscription
-- **Machine à états** pour le cycle de vie des commandes, avec autorisation par rôle :
-  
+### Centralized error handling
+
+The project uses typed errors instead of repeating try/catch blocks in every controller:
+
+- `src/errors/AppError.ts` — base class carrying an HTTP status code
+- `src/errors/index.ts` — specific errors (`NotFoundError`, `ForbiddenError`, `ConflictError`, `BadRequestError`, `UnauthorizedError`)
+- `src/middlewares/errorHandler.middleware.ts` — global middleware that catches and formats every error
+- `src/utils/asyncHandler.ts` — wrapper that automatically forwards async errors to the global middleware
+
+Services throw typed errors directly (`throw new NotFoundError(...)`), keeping controllers focused purely on HTTP, with no manual error handling.
+
+## 📊 Data model
+
+10 entities: `User`, `Category`, `Dish`, `Cart`, `CartItem`, `Order`, `OrderItem`, `Payment`, `Delivery`, `Address`.
+
+- **Manual soft delete** (`deletedAt: null`) on `User`, `Category`, `Dish`, `Address` — preserves the integrity of past order history. `Order`, `OrderItem`, `Payment`, `Delivery` are immutable historical records (no soft delete).
+- **Server-side persistent cart**, auto-created at registration (`@@unique([cartId, dishId])`, `unitPrice` captured at add time)
+- **State machine** for the order lifecycle, with two-level verification (logically valid transition + authorized role):
+  ```
   PENDING → CONFIRMED → PREPARING → READY_FOR_DELIVERY → OUT_FOR_DELIVERY → DELIVERED
-↘ ↘ ↘
-CANCELLED: dans le cas d'une commande annule par un user ou par le systeme
+                ↘             ↘             ↘
+                            CANCELLED
+  ```
+- **Anti-fraud price verification**: when an order is created, dish prices are re-checked against the database rather than trusting the price frozen in the cart.
+- **Pagination** (`page`, `limit`, capped at 100) on high-volume lists: `Dish`, `Order`. `Category` is left unpaginated (structurally low volume).
 
-## ✅ Fonctionnalités actuelles
+## ✅ Current features
 
-- [x] Authentification JWT complète (register, login, refresh, profil)
-- [x] Gestion des catégories et plats (CRUD, lecture publique / écriture admin)
-- [x] Gestion des adresses utilisateur (CRUD, adresse par défaut unique)
-- [x] Panier persistant (ajout, incrémentation automatique, modification, suppression)
-      
-##  Fonctionnalités a developper
-- [ ] Création de commande depuis le panier (transaction atomique, vérification anti-fraude des prix)
-- [ ] Machine à états des commandes avec autorisation par rôle (client/admin/livreur)
-- [ ] Gestion de la livraison (assignation livreur, suivi)
-- [ ] Intégration paiement (MTN MoMo / Orange Money)
-- [ ] Frontend React
-- [ ] Conteneurisation et déploiement DevOps
+- [x] Full JWT authentication (register, login, refresh with rotation, `/me` profile)
+- [x] Category management (CRUD, public read / admin write)
+- [x] Dish management (CRUD, category relation, filtering, pagination)
+- [x] User address management (CRUD, single default address, ownership protection)
+- [x] Persistent cart (add with auto-increment, update, remove)
+- [x] Order creation from cart (atomic transaction, anti-fraud price verification)
+- [x] Order state machine with role-based authorization (client/admin/delivery agent)
+- [x] Delivery management (admin assignment, automatic transition, restricted to assigned agent)
+- [x] Centralized error handling (typed error classes + global middleware)
+- [x] Pagination on high-volume lists
+- [ ] Auto-expiration of stale `PENDING` orders (cron/k8s CronJob — planned in polish phase)
+- [ ] Payment integration (MTN MoMo / Orange Money)
+- [ ] React frontend
+- [ ] Containerization and DevOps deployment
+
+## 🔐 Roles and permissions
+
+| Role | Description |
+|---|---|
+| `CLIENT` | Browses the catalog, manages their cart/addresses, places orders, can cancel their own pending orders |
+| `ADMIN` | Manages categories/dishes, confirms and advances orders, assigns delivery agents |
+| `DELIVERY_AGENT` | Views their assigned deliveries, marks an order as delivered (only those assigned to them) |
 
 ## 🚀 Installation
 
 ```bash
-# Cloner le repo
-git clone <url_du_repo>
+# Clone the repo
+git clone <repo_url>
 cd food_ordering_app
 
-# Installer les dépendances
+# Install dependencies
 npm install
 
-# Configurer les variables d'environnement
+# Configure environment variables
 cp .env.example .env
-# Remplir DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
+# Fill in DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET
 
-# Générer le client Prisma (non versionné, requis après chaque clone)
+# Generate the Prisma client (not versioned, required after every clone)
 npx prisma generate
 
-# Lancer les migrations
+# Run migrations
 npx prisma migrate dev
 
-# Démarrer le serveur en développement
+# Start the dev server
 npm run dev
 ```
 
-## 📁 Structure du projet
+## 📁 Project structure
+
+```
 src/
-├── config/ # Configuration (Prisma client)
-├── middlewares/ # requireAuth, requireRole, validate
+├── config/              # Configuration (Prisma client)
+├── errors/              # AppError and typed error classes
+├── middlewares/         # requireAuth, requireRole, validate, errorHandler
 ├── modules/
-│ ├── auth/
-│ ├── category/
-│ ├── dish/
-│ ├── address/
-│ ├── cart/
-│ └── order/
-├── validators/ # Schémas Zod
-├── utils/ # Utilitaires (JWT, etc.)
-└── types/ # Extensions de types (Express Request)
+│   ├── auth/
+│   ├── category/
+│   ├── dish/
+│   ├── address/
+│   ├── cart/
+│   ├── order/
+│   └── delivery/
+├── validators/          # Zod schemas
+├── utils/               # JWT, pagination, asyncHandler
+└── types/               # Type extensions (Express Request)
+```
+
