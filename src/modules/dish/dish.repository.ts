@@ -16,6 +16,12 @@ class DishRepository {
     });
   }
 
+  findManyByIds(ids: string[]) {
+    return prisma.dish.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+    });
+  }
+
   findByCategory(categoryId: string) {
     return prisma.dish.findMany({
       where: { categoryId, deletedAt: null },
