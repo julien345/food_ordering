@@ -68,6 +68,20 @@ class OrderRepository {
   updateStatus(id: string, status: OrderStatus) {
     return prisma.order.update({ where: { id }, data: { status } });
   }
+
+  async findAllPaginated(skip: number, take: number) {
+    const [data, total] = await prisma.$transaction([
+      prisma.order.findMany({
+        include: { items: true, address: true, payment: true, delivery: true, user: true },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      }),
+      prisma.order.count(),
+    ]);
+
+    return { data, total };
+  }
 }
 
 export default new OrderRepository();

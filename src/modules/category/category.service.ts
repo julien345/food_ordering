@@ -1,20 +1,20 @@
-// src/modules/category/category.service.ts
-import categoryRepository  from "./category.repository";
+import categoryRepository from "./category.repository";
+import { NotFoundError, ConflictError } from "../../errors";
 
-export class CategoryService {
+class CategoryService {
   async getAll() {
     return categoryRepository.findAll();
   }
 
   async getById(id: string) {
     const category = await categoryRepository.findById(id);
-    if (!category) throw new Error("CATEGORY_NOT_FOUND");
+    if (!category) throw new NotFoundError("Catégorie introuvable.");
     return category;
   }
 
   async create(data: { name: string; imageUrl?: string }) {
     const existing = await categoryRepository.findByName(data.name);
-    if (existing) throw new Error("CATEGORY_ALREADY_EXISTS");
+    if (existing) throw new ConflictError("Cette catégorie existe déjà.");
     return categoryRepository.create(data);
   }
 

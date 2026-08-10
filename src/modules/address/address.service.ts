@@ -1,5 +1,5 @@
-// src/modules/address/address.service.ts
 import addressRepository from "./address.repository";
+import { NotFoundError, ForbiddenError } from "../../errors";
 
 class AddressService {
   async getAll(userId: string) {
@@ -8,8 +8,8 @@ class AddressService {
 
   async getById(id: string, userId: string) {
     const address = await addressRepository.findById(id);
-    if (!address) throw new Error("ADDRESS_NOT_FOUND");
-    if (address.userId !== userId) throw new Error("FORBIDDEN");
+    if (!address) throw new NotFoundError("Adresse introuvable.");
+    if (address.userId !== userId) throw new ForbiddenError();
     return address;
   }
 
@@ -42,7 +42,7 @@ class AddressService {
       isDefault?: boolean;
     }
   ) {
-    await this.getById(id, userId); // vérifie existence + propriété
+    await this.getById(id, userId);
 
     if (data.isDefault) {
       await addressRepository.unsetDefaultForUser(userId);

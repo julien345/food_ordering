@@ -1,9 +1,12 @@
+// order.service.ts
 import orderRepository, { CreateOrderItemsInput } from "./order.repository";
 import cartRepository from "../cart/cart.repository";
 import addressRepository from "../address/address.repository";
 import dishRepository from "../dish/dish.repository";
-import deliveryRepository from "../delivery/delivery.repository"
+import deliveryRepository from "../delivery/delivery.repository";
 import { OrderStatus } from "../../generated/prisma/client";
+import { NotFoundError, ForbiddenError, ConflictError } from "../../errors";
+import { parsePaginationParams, buildPaginatedResult, PaginationParams } from "../../utils/pagination";
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ["CONFIRMED", "CANCELLED"],
@@ -27,8 +30,10 @@ const TRANSITION_ROLES: Record<string, string[]> = {
 };
 
 class OrderService {
-  async getAll() {
-    return orderRepository.findAll();
+  async getAllPaginated(params: PaginationParams) {
+    const skip = (params.page - 1) * params.limit;
+    const { data, total } = await orderRepository.findAllPaginated(skip, params.limit);
+    return buildPaginatedResult(data, total, params);
   }
 
   async getAllForUser(userId: string) {
@@ -37,10 +42,10 @@ class OrderService {
 
   async getById(id: string, userId: string, role: string) {
     const order = await orderRepository.findById(id);
-    if (!order) throw new Error("ORDER_NOT_FOUND");
+    if (!order) throw new NotFoundError("Commande introuvable.");
 
     if (role === "CLIENT" && order.userId !== userId) {
-      throw new Error("FORBIDDEN");
+      throw new ForbiddenError();
     }
 
     return order;
@@ -48,22 +53,19 @@ class OrderService {
 
   async createFromCart(userId: string, addressId: string) {
     const address = await addressRepository.findById(addressId);
-    if (!address) throw new Error("ADDRESS_NOT_FOUND");
-    if (address.userId !== userId) throw new Error("FORBIDDEN");
+    if (!address) throw new NotFoundError("Adresse introuvable.");
+    if (address.userId !== userId) throw new ForbiddenError("Cette adresse ne vous appartient pas.");
 
     const cart = await cartRepository.findByUserId(userId);
-    if (!cart || cart.items.length === 0) throw new Error("CART_EMPTY");
+    if (!cart || cart.items.length === 0) throw new ConflictError("Votre panier est vide.");
 
-    // Sécurité anti-fraude : on récupère le prix réel et actuel des plats en base,
-    // plutôt que de faire confiance au unitPrice figé dans le panier.
-    // findManyByIds filtre déjà deletedAt: null (via dishRepository).
     const dishIds = cart.items.map((item) => item.dishId);
     const dbDishes = await dishRepository.findManyByIds(dishIds);
     const dishPriceMap = new Map(dbDishes.map((d) => [d.id, d.price]));
 
     const orderItems: CreateOrderItemsInput[] = cart.items.map((item) => {
       const realPrice = dishPriceMap.get(item.dishId);
-      if (realPrice === undefined) throw new Error("DISH_NOT_FOUND"); // plat supprimé entre-temps
+      if (realPrice === undefined) throw new NotFoundError("Un des plats du panier n'existe plus.");
       return {
         dishId: item.dishId,
         quantity: item.quantity,
@@ -75,36 +77,34 @@ class OrderService {
   }
 
   async updateStatus(orderId: string, newStatus: OrderStatus, userId: string, role: string) {
-  const order = await orderRepository.findStatusAndUser(orderId);
-  if (!order) throw new Error("ORDER_NOT_FOUND");
+    const order = await orderRepository.findStatusAndUser(orderId);
+    if (!order) throw new NotFoundError("Commande introuvable.");
 
-  if (role === "CLIENT" && order.userId !== userId) {
-    throw new Error("FORBIDDEN");
-  }
-
-  const currentStatus = order.status;
-
-  if (!ALLOWED_TRANSITIONS[currentStatus].includes(newStatus)) {
-    throw new Error("INVALID_TRANSITION");
-  }
-
-  const transitionKey = `${currentStatus}->${newStatus}`;
-  const allowedRoles = TRANSITION_ROLES[transitionKey] ?? [];
-  if (!allowedRoles.includes(role)) {
-    throw new Error("ROLE_NOT_ALLOWED");
-  }
-
-  // Durcissement : un DELIVERY_AGENT ne peut marquer comme livrée QUE
-  // la commande qui lui est réellement assignée via Delivery
-  if (transitionKey === "OUT_FOR_DELIVERY->DELIVERED" && role === "DELIVERY_AGENT") {
-    const delivery = await deliveryRepository.findByOrderId(orderId);
-    if (!delivery || delivery.agentId !== userId) {
-      throw new Error("FORBIDDEN");
+    if (role === "CLIENT" && order.userId !== userId) {
+      throw new ForbiddenError();
     }
-  }
 
-  return orderRepository.updateStatus(orderId, newStatus);
-}
+    const currentStatus = order.status;
+
+    if (!ALLOWED_TRANSITIONS[currentStatus].includes(newStatus)) {
+      throw new ConflictError("Transition de statut invalide.");
+    }
+
+    const transitionKey = `${currentStatus}->${newStatus}`;
+    const allowedRoles = TRANSITION_ROLES[transitionKey] ?? [];
+    if (!allowedRoles.includes(role)) {
+      throw new ForbiddenError("Votre rôle ne permet pas cette action.");
+    }
+
+    if (transitionKey === "OUT_FOR_DELIVERY->DELIVERED" && role === "DELIVERY_AGENT") {
+      const delivery = await deliveryRepository.findByOrderId(orderId);
+      if (!delivery || delivery.agentId !== userId) {
+        throw new ForbiddenError("Cette livraison ne vous est pas assignée.");
+      }
+    }
+
+    return orderRepository.updateStatus(orderId, newStatus);
+  }
 }
 
 export default new OrderService();

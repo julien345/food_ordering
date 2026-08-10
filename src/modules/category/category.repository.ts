@@ -25,6 +25,7 @@ import prisma from "../../config/prisma";
   softDelete(id: string) {
     return prisma.category.update({ where: { id }, data: { deletedAt: new Date() } });
   }
+  
 }
 
 export default new CategoryRepository();
