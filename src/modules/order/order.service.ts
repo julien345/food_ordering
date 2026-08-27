@@ -4,9 +4,12 @@ import cartRepository from "../cart/cart.repository";
 import addressRepository from "../address/address.repository";
 import dishRepository from "../dish/dish.repository";
 import deliveryRepository from "../delivery/delivery.repository";
+import prisma from "../../config/prisma";
 import { OrderStatus } from "../../generated/prisma/client";
 import { NotFoundError, ForbiddenError, ConflictError } from "../../errors";
 import { parsePaginationParams, buildPaginatedResult, PaginationParams } from "../../utils/pagination";
+
+type PrismaClientExecutor = Omit<typeof prisma, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
   PENDING: ["CONFIRMED", "CANCELLED"],
@@ -19,7 +22,7 @@ const ALLOWED_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
 };
 
 const TRANSITION_ROLES: Record<string, string[]> = {
-  "PENDING->CONFIRMED": ["ADMIN"],
+  "PENDING->CONFIRMED": ["ADMIN", "SYSTEM"],
   "PENDING->CANCELLED": ["CLIENT", "ADMIN"],
   "CONFIRMED->PREPARING": ["ADMIN"],
   "CONFIRMED->CANCELLED": ["ADMIN"],
@@ -43,49 +46,57 @@ class OrderService {
   async getById(id: string, userId: string, role: string) {
     const order = await orderRepository.findById(id);
     if (!order) throw new NotFoundError("Commande introuvable.");
-
-    if (role === "CLIENT" && order.userId !== userId) {
-      throw new ForbiddenError();
-    }
-
+    if (role === "CLIENT" && order.userId !== userId) throw new ForbiddenError();
     return order;
   }
 
-  async createFromCart(userId: string, addressId: string) {
-    const address = await addressRepository.findById(addressId);
-    if (!address) throw new NotFoundError("Adresse introuvable.");
-    if (address.userId !== userId) throw new ForbiddenError("Cette adresse ne vous appartient pas.");
+async createFromCart(userId: string, addressId: string) {
+  const address = await addressRepository.findById(addressId);
+  if (!address) throw new NotFoundError("Adresse introuvable.");
+  if (address.userId !== userId) throw new ForbiddenError("Cette adresse ne vous appartient pas.");
 
-    const cart = await cartRepository.findByUserId(userId);
-    if (!cart || cart.items.length === 0) throw new ConflictError("Votre panier est vide.");
+  const deliveryAddressSnapshot = `${address.label} - ${address.street}, ${address.city}`;
+
+  return prisma.$transaction(async (tx) => {
+    const cart = await cartRepository.findByUserId(userId, tx);
+    if (!cart || cart.items.length === 0) {
+      throw new ConflictError("Votre panier est vide.");
+    }
 
     const dishIds = cart.items.map((item) => item.dishId);
-    const dbDishes = await dishRepository.findManyByIds(dishIds);
-    const dishPriceMap = new Map(dbDishes.map((d) => [d.id, d.price]));
+    const dbDishes = await dishRepository.findManyByIds(dishIds, tx);
+    const dishMap = new Map(dbDishes.map((d) => [d.id, d]));
 
     const orderItems: CreateOrderItemsInput[] = cart.items.map((item) => {
-      const realPrice = dishPriceMap.get(item.dishId);
-      if (realPrice === undefined) throw new NotFoundError("Un des plats du panier n'existe plus.");
+      const dish = dishMap.get(item.dishId);
+      if (!dish) throw new NotFoundError("Un des plats du panier n'existe plus.");
+      if (!dish.isAvailable) throw new ConflictError("Un des plats de votre panier n'est plus disponible.");
       return {
         dishId: item.dishId,
         quantity: item.quantity,
-        unitPrice: realPrice,
+        unitPrice: dish.price,
+        dishNameSnapshot: dish.name,
+        dishImageSnapshot: dish.image
       };
     });
 
-    return orderRepository.createFromCart(userId, addressId, orderItems, cart.id);
-  }
+    return orderRepository.createFromCart(userId, addressId, orderItems, cart.id, deliveryAddressSnapshot, tx);
+  });
+}
 
-  async updateStatus(orderId: string, newStatus: OrderStatus, userId: string, role: string) {
+async getByOrderNumber(orderNumber: number, userId: string, role: string) {
+  const order = await orderRepository.findByOrderNumber(orderNumber);
+  if (!order) throw new NotFoundError("Commande introuvable.");
+  if (role === "CLIENT" && order.userId !== userId) throw new ForbiddenError();
+  return order;
+}
+
+  async updateStatus(orderId: string, newStatus: OrderStatus, userId: string, role: string, tx?: PrismaClientExecutor) {
     const order = await orderRepository.findStatusAndUser(orderId);
     if (!order) throw new NotFoundError("Commande introuvable.");
-
-    if (role === "CLIENT" && order.userId !== userId) {
-      throw new ForbiddenError();
-    }
+    if (role === "CLIENT" && order.userId !== userId) throw new ForbiddenError();
 
     const currentStatus = order.status;
-
     if (!ALLOWED_TRANSITIONS[currentStatus].includes(newStatus)) {
       throw new ConflictError("Transition de statut invalide.");
     }
@@ -103,8 +114,9 @@ class OrderService {
       }
     }
 
-    return orderRepository.updateStatus(orderId, newStatus);
+    return orderRepository.updateStatus(orderId, newStatus, tx);
   }
+
 }
 
 export default new OrderService();

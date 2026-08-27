@@ -1,6 +1,7 @@
+// src/validators/user.validator.ts
 import { z } from "zod";
 
-export const registerSchema = z.object({
+export const createUserByAdminSchema = z.object({
   email: z.string().email("Email invalide"),
   password: z
     .string()
@@ -12,12 +13,11 @@ export const registerSchema = z.object({
     .string()
     .regex(/^\+?[1-9]\d{1,14}$/, "Format de numéro de téléphone international invalide")
     .optional(),
+  role: z.enum(["CLIENT", "ADMIN", "DELIVERY_AGENT"]),
+})
+
+export const updateUserRoleSchema = z.object({
+  role: z.enum(["ADMIN", "DELIVERY_AGENT"]),
 });
 
-export const loginSchema = z.object({
-  email: z.string().email("Email invalide"),
-  password: z.string().min(1, "Le mot de passe est requis"),
-});
-
-export type RegisterInput = z.infer<typeof registerSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
+export type CreateUserByAdminInput = z.infer<typeof createUserByAdminSchema>;

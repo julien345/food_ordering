@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import dishService from "./dish.service";
 import { parsePaginationParams } from "../../utils/pagination";
+import { BadRequestError } from "../../errors";
+import { categoryIdQuerySchema } from "../../validators/dish.validator";
 
 type DishParams = { id: string };
 type DishQuery = { categoryId?: string; page?: string; limit?: string };
@@ -8,6 +10,10 @@ type DishQuery = { categoryId?: string; page?: string; limit?: string };
 class DishController {
   async getAll(req: Request<{}, {}, {}, DishQuery>, res: Response) {
     if (req.query.categoryId) {
+      const parsedCategory = categoryIdQuerySchema.safeParse(req.query.categoryId);
+      if (!parsedCategory.success) {
+        throw new BadRequestError("Le format de categoryId est invalide.");
+      }
       const dishes = await dishService.getByCategory(req.query.categoryId);
       return res.status(200).json(dishes);
     }

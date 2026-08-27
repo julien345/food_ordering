@@ -1,27 +1,27 @@
 import bcrypt from "bcrypt";
 import authRepository from "./auth.repository";
-import {
-  generateAccessToken,
-  generateRefreshToken,
-  verifyRefreshToken,
-} from "../../utils/jwt";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwt";
 import { ConflictError, UnauthorizedError, NotFoundError } from "../../errors";
+import { RegisterInput } from "../../validators/auth.validator";
 
 class AuthService {
-  async register(input: {
-    email: string;
-    password: string;
-    firstName: string;
-    lastName: string;
-    phone?: string;
-  }) {
-    const existing = await authRepository.findByEmail(input.email);
-    if (existing) throw new ConflictError("Cet email est déjà utilisé.");
+  async register(input: RegisterInput) {
+    const existingEmail = await authRepository.findByEmail(input.email);
+    if (existingEmail) throw new ConflictError("Cet email est déjà utilisé.");
+
+    if (input.phone) {
+      const existingPhone = await authRepository.phoneAlreadyExists(input.phone);
+      if (existingPhone) throw new ConflictError("Ce numéro de téléphone est déjà utilisé.");
+    }
 
     const hashedPassword = await bcrypt.hash(input.password, 10);
+
     const user = await authRepository.createUserWithCart({
-      ...input,
+      email: input.email,
       password: hashedPassword,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      phone: input.phone,
     });
 
     const accessToken = generateAccessToken({ userId: user.id, role: user.role });

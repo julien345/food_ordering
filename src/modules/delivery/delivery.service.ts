@@ -3,6 +3,7 @@ import deliveryRepository from "./delivery.repository";
 import orderRepository from "../order/order.repository";
 import orderService from "../order/order.service";
 import authRepository from "../auth/auth.repository";
+import prisma from "../../config/prisma";
 import { NotFoundError, ForbiddenError, ConflictError, BadRequestError } from "../../errors";
 
 class DeliveryService {
@@ -22,11 +23,11 @@ class DeliveryService {
       throw new BadRequestError("Cet utilisateur n'est pas un livreur.");
     }
 
-    const delivery = await deliveryRepository.create(orderId, agentId);
-
-    await orderService.updateStatus(orderId, "OUT_FOR_DELIVERY", order.userId, "ADMIN");
-
-    return delivery;
+    return prisma.$transaction(async (tx) => {
+      const delivery = await deliveryRepository.create(orderId, agentId, tx);
+      await orderService.updateStatus(orderId, "OUT_FOR_DELIVERY", order.userId, "ADMIN", tx);
+      return delivery;
+    });
   }
 
   async getMyDeliveries(agentId: string) {
@@ -44,8 +45,10 @@ class DeliveryService {
     const order = await orderRepository.findById(delivery.orderId);
     if (!order) throw new NotFoundError("Commande introuvable.");
 
-    await deliveryRepository.markDelivered(deliveryId);
-    return orderService.updateStatus(delivery.orderId, "DELIVERED", userId, role);
+    return prisma.$transaction(async (tx) => {
+      await deliveryRepository.markDelivered(deliveryId, tx);
+      return orderService.updateStatus(delivery.orderId, "DELIVERED", userId, role, tx);
+    });
   }
 }
 

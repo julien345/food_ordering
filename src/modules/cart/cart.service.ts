@@ -1,3 +1,4 @@
+// src/modules/cart/cart.service.ts
 import cartRepository from "./cart.repository";
 import dishRepository from "../dish/dish.repository";
 import { NotFoundError, ForbiddenError, ConflictError } from "../../errors";
@@ -7,7 +8,7 @@ class CartService {
     const cart = await cartRepository.findByUserId(userId);
     if (!cart) throw new NotFoundError("Panier introuvable.");
 
-    const total = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    const total = cart.items.reduce((sum, item) => sum + item.dish.price * item.quantity, 0);
 
     return { ...cart, total };
   }
@@ -20,13 +21,7 @@ class CartService {
     if (!dish) throw new NotFoundError("Plat introuvable.");
     if (!dish.isAvailable) throw new ConflictError("Ce plat n'est plus disponible.");
 
-    const existingItem = await cartRepository.findItemByCartAndDish(cart.id, dishId);
-
-    if (existingItem) {
-      return cartRepository.incrementItemQuantity(existingItem.id, quantity);
-    }
-
-    return cartRepository.addItem(cart.id, dishId, quantity, dish.price);
+    return cartRepository.upsertItem(cart.id, dishId, quantity);
   }
 
   async updateItemQuantity(userId: string, itemId: string, quantity: number) {
@@ -52,6 +47,7 @@ class CartService {
   async clearCart(userId: string) {
     const cart = await cartRepository.findByUserId(userId);
     if (!cart) throw new NotFoundError("Panier introuvable.");
+
     return cartRepository.clearCart(cart.id);
   }
 }

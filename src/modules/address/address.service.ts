@@ -1,5 +1,7 @@
 import addressRepository from "./address.repository";
+import prisma from "../../config/prisma";
 import { NotFoundError, ForbiddenError } from "../../errors";
+import { CreateAddressInput, UpdateAddressInput } from "../../validators/address.validator";
 
 class AddressService {
   async getAll(userId: string) {
@@ -13,46 +15,44 @@ class AddressService {
     return address;
   }
 
-  async create(
-    userId: string,
-    data: {
-      label: string;
-      street: string;
-      city: string;
-      latitude?: number;
-      longitude?: number;
-      isDefault?: boolean;
+async create(userId: string, data: CreateAddressInput) {
+  return prisma.$transaction(async (tx) => {
+    const existingAddressesCount = await tx.address.count({
+      where: { userId, deletedAt: null },
+    });
+    const shouldBeDefault = existingAddressesCount === 0 || data.isDefault;
+    if (shouldBeDefault) {
+      await addressRepository.unsetDefaultForUser(userId, tx);
     }
-  ) {
-    if (data.isDefault) {
-      await addressRepository.unsetDefaultForUser(userId);
-    }
-    return addressRepository.create(userId, data);
-  }
+    return addressRepository.create(userId, { ...data, isDefault: shouldBeDefault }, tx);
+  });
+}
 
-  async update(
-    id: string,
-    userId: string,
-    data: {
-      label?: string;
-      street?: string;
-      city?: string;
-      latitude?: number;
-      longitude?: number;
-      isDefault?: boolean;
-    }
-  ) {
+
+  async update(id: string, userId: string, data: UpdateAddressInput) {
     await this.getById(id, userId);
 
-    if (data.isDefault) {
-      await addressRepository.unsetDefaultForUser(userId);
-    }
-    return addressRepository.update(id, data);
+    return prisma.$transaction(async (tx) => {
+      if (data.isDefault) {
+        await addressRepository.unsetDefaultForUser(userId, tx);
+      }
+      return addressRepository.update(id, data, tx);
+    });
   }
 
   async remove(id: string, userId: string) {
-    await this.getById(id, userId);
-    return addressRepository.softDelete(id);
+    const address = await this.getById(id, userId);
+
+    return prisma.$transaction(async (tx) => {
+      await addressRepository.softDelete(id, tx);
+
+      if (address.isDefault) {
+        const fallbackAddress = await addressRepository.findLatestActiveByUser(userId, tx);
+        if (fallbackAddress) {
+          await addressRepository.update(fallbackAddress.id, { isDefault: true }, tx);
+        }
+      }
+    });
   }
 }
 

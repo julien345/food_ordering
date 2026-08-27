@@ -1,6 +1,13 @@
+// delivery.repository.ts
 import prisma from "../../config/prisma";
 
+type PrismaClientExecutor = Omit<typeof prisma, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+
 class DeliveryRepository {
+  private getClient(tx?: PrismaClientExecutor) {
+    return tx || prisma;
+  }
+
   findByOrderId(orderId: string) {
     return prisma.delivery.findUnique({ where: { orderId } });
   }
@@ -17,12 +24,12 @@ class DeliveryRepository {
     });
   }
 
-  create(orderId: string, agentId: string) {
-    return prisma.delivery.create({ data: { orderId, agentId } });
+  create(orderId: string, agentId: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).delivery.create({ data: { orderId, agentId } });
   }
 
-  markDelivered(id: string) {
-    return prisma.delivery.update({ where: { id }, data: { deliveredAt: new Date() } });
+  markDelivered(id: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).delivery.update({ where: { id }, data: { deliveredAt: new Date() } });
   }
 }
 

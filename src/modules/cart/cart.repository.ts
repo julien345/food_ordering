@@ -1,20 +1,21 @@
+// src/modules/cart/cart.repository.ts
 import prisma from "../../config/prisma";
 
+type PrismaClientExecutor = Omit<typeof prisma, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
+
 class CartRepository {
-  findByUserId(userId: string) {
-    return prisma.cart.findFirst({
+  private getClient(tx?: PrismaClientExecutor) {
+    return tx || prisma;
+  }
+
+  findByUserId(userId: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).cart.findFirst({
       where: { userId },
       include: {
         items: {
           include: { dish: true },
         },
       },
-    });
-  }
-
-  findItemByCartAndDish(cartId: string, dishId: string) {
-    return prisma.cartItem.findFirst({
-      where: { cartId, dishId },
     });
   }
 
@@ -25,16 +26,11 @@ class CartRepository {
     });
   }
 
-  addItem(cartId: string, dishId: string, quantity: number, unitPrice: number) {
-    return prisma.cartItem.create({
-      data: { cartId, dishId, quantity, unitPrice },
-    });
-  }
-
-  incrementItemQuantity(id: string, quantity: number) {
-    return prisma.cartItem.update({
-      where: { id },
-      data: { quantity: { increment: quantity } },
+  upsertItem(cartId: string, dishId: string, quantity: number) {
+    return prisma.cartItem.upsert({
+      where: { cartId_dishId: { cartId, dishId } },
+      update: { quantity: { increment: quantity } },
+      create: { cartId, dishId, quantity },
     });
   }
 
@@ -49,8 +45,8 @@ class CartRepository {
     return prisma.cartItem.delete({ where: { id } });
   }
 
-  clearCart(cartId: string) {
-    return prisma.cartItem.deleteMany({ where: { cartId } });
+  clearCart(cartId: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).cartItem.deleteMany({ where: { cartId } });
   }
 }
 

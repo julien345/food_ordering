@@ -20,6 +20,14 @@ class CategoryService {
 
   async update(id: string, data: { name?: string; imageUrl?: string }) {
     await this.getById(id);
+
+    if (data.name) {
+      const existing = await categoryRepository.findByName(data.name);
+      if (existing && existing.id !== id) {
+        throw new ConflictError("Une autre catégorie porte déjà ce nom.");
+      }
+    }
+
     return categoryRepository.update(id, data);
   }
 

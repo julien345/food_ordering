@@ -1,7 +1,14 @@
 // src/modules/address/address.repository.ts
 import prisma from "../../config/prisma";
+import { CreateAddressInput, UpdateAddressInput } from "../../validators/address.validator";
+
+type PrismaClientExecutor = Omit<typeof prisma, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">;
 
 class AddressRepository {
+  private getClient(tx?: PrismaClientExecutor) {
+    return tx || prisma;
+  }
+
   findAllByUser(userId: string) {
     return prisma.address.findMany({
       where: { userId, deletedAt: null },
@@ -13,40 +20,30 @@ class AddressRepository {
     return prisma.address.findFirst({ where: { id, deletedAt: null } });
   }
 
-  create(
-    userId: string,
-    data: {
-      label: string;
-      street: string;
-      city: string;
-      latitude?: number;
-      longitude?: number;
-      isDefault?: boolean;
-    }
-  ) {
-    return prisma.address.create({ data: { ...data, userId } });
+  findLatestActiveByUser(userId: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).address.findFirst({
+      where: { userId, deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+    });
   }
 
-  update(
-    id: string,
-    data: {
-      label?: string;
-      street?: string;
-      city?: string;
-      latitude?: number;
-      longitude?: number;
-      isDefault?: boolean;
-    }
-  ) {
-    return prisma.address.update({ where: { id }, data });
+  create(userId: string, data: CreateAddressInput, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).address.create({ data: { ...data, userId } });
   }
 
-  softDelete(id: string) {
-    return prisma.address.update({ where: { id }, data: { deletedAt: new Date() } });
+  update(id: string, data: UpdateAddressInput, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).address.update({ where: { id }, data });
   }
 
-  unsetDefaultForUser(userId: string) {
-    return prisma.address.updateMany({
+  softDelete(id: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).address.update({
+      where: { id },
+      data: { deletedAt: new Date(), isDefault: false },
+    });
+  }
+
+  unsetDefaultForUser(userId: string, tx?: PrismaClientExecutor) {
+    return this.getClient(tx).address.updateMany({
       where: { userId, isDefault: true, deletedAt: null },
       data: { isDefault: false },
     });

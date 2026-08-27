@@ -1,4 +1,3 @@
-// address.routes.ts
 import { Router } from "express";
 import addressController from "./address.controller";
 import { requireAuth } from "../../middlewares/auth.middleware";

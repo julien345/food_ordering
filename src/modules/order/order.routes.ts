@@ -23,4 +23,6 @@ router.patch(
   asyncHandler(orderController.updateStatus.bind(orderController))
 );
 
+router.get("/by-number/:orderNumber", requireAuth, asyncHandler(orderController.getByOrderNumber.bind(orderController)));
+
 export default router;

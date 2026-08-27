@@ -8,7 +8,7 @@ CREATE TYPE "OrderStatus" AS ENUM ('PENDING', 'CONFIRMED', 'PREPARING', 'READY_F
 CREATE TYPE "PaymentStatus" AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED');
 
 -- CreateEnum
-CREATE TYPE "PaymentMethod" AS ENUM ('MTN_MOMO', 'ORANGE_MONEY', 'CASH_ON_DELIVERY');
+CREATE TYPE "PaymentMethod" AS ENUM ('STRIPE', 'MTN_MOMO', 'ORANGE_MONEY');
 
 -- CreateTable
 CREATE TABLE "User" (
@@ -58,7 +58,7 @@ CREATE TABLE "Dish" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
-    "price" DOUBLE PRECISION NOT NULL,
+    "price" DECIMAL(10,2) NOT NULL,
     "imageUrl" TEXT,
     "isAvailable" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -83,7 +83,6 @@ CREATE TABLE "Cart" (
 CREATE TABLE "CartItem" (
     "id" TEXT NOT NULL,
     "quantity" INTEGER NOT NULL DEFAULT 1,
-    "unitPrice" DOUBLE PRECISION NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "cartId" TEXT NOT NULL,
     "dishId" TEXT NOT NULL,
@@ -95,7 +94,8 @@ CREATE TABLE "CartItem" (
 CREATE TABLE "Order" (
     "id" TEXT NOT NULL,
     "status" "OrderStatus" NOT NULL DEFAULT 'PENDING',
-    "totalAmount" DOUBLE PRECISION NOT NULL,
+    "totalAmount" DECIMAL(10,2) NOT NULL,
+    "deliveryAddressSnapshot" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     "userId" TEXT NOT NULL,
@@ -108,7 +108,7 @@ CREATE TABLE "Order" (
 CREATE TABLE "OrderItem" (
     "id" TEXT NOT NULL,
     "quantity" INTEGER NOT NULL,
-    "unitPrice" DOUBLE PRECISION NOT NULL,
+    "unitPrice" DECIMAL(10,2) NOT NULL,
     "orderId" TEXT NOT NULL,
     "dishId" TEXT NOT NULL,
 
@@ -118,7 +118,7 @@ CREATE TABLE "OrderItem" (
 -- CreateTable
 CREATE TABLE "Payment" (
     "id" TEXT NOT NULL,
-    "amount" DOUBLE PRECISION NOT NULL,
+    "amount" DECIMAL(10,2) NOT NULL,
     "method" "PaymentMethod" NOT NULL,
     "status" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
     "transactionId" TEXT,
@@ -146,10 +146,16 @@ CREATE TABLE "Delivery" (
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "User_phone_key" ON "User"("phone");
+
+-- CreateIndex
 CREATE INDEX "User_deletedAt_idx" ON "User"("deletedAt");
 
 -- CreateIndex
 CREATE INDEX "Address_deletedAt_idx" ON "Address"("deletedAt");
+
+-- CreateIndex
+CREATE INDEX "Address_latitude_longitude_idx" ON "Address"("latitude", "longitude");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Category_name_key" ON "Category"("name");
@@ -167,6 +173,12 @@ CREATE UNIQUE INDEX "Cart_userId_key" ON "Cart"("userId");
 CREATE UNIQUE INDEX "CartItem_cartId_dishId_key" ON "CartItem"("cartId", "dishId");
 
 -- CreateIndex
+CREATE INDEX "Order_userId_idx" ON "Order"("userId");
+
+-- CreateIndex
+CREATE INDEX "Order_status_idx" ON "Order"("status");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Payment_transactionId_key" ON "Payment"("transactionId");
 
 -- CreateIndex
@@ -175,6 +187,9 @@ CREATE UNIQUE INDEX "Payment_orderId_key" ON "Payment"("orderId");
 -- CreateIndex
 CREATE UNIQUE INDEX "Delivery_orderId_key" ON "Delivery"("orderId");
 
+-- CreateIndex
+CREATE INDEX "Delivery_agentId_idx" ON "Delivery"("agentId");
+
 -- AddForeignKey
 ALTER TABLE "Address" ADD CONSTRAINT "Address_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -182,7 +197,7 @@ ALTER TABLE "Address" ADD CONSTRAINT "Address_userId_fkey" FOREIGN KEY ("userId"
 ALTER TABLE "Dish" ADD CONSTRAINT "Dish_categoryId_fkey" FOREIGN KEY ("categoryId") REFERENCES "Category"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Cart" ADD CONSTRAINT "Cart_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Cart" ADD CONSTRAINT "Cart_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CartItem" ADD CONSTRAINT "CartItem_cartId_fkey" FOREIGN KEY ("cartId") REFERENCES "Cart"("id") ON DELETE CASCADE ON UPDATE CASCADE;
