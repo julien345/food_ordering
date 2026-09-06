@@ -1,0 +1,196 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+  DELIVERY_AGENT
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY_FOR_DELIVERY
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  MTN_MOMO
+  ORANGE_MONEY
+  CASH_ON_DELIVERY
+}
+
+model User {
+  id         String     @id @default(uuid())
+  email      String     @unique
+  password   String
+  firstName  String
+  lastName   String
+  phone      String?    @unique
+  role       Role       @default(CLIENT)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  deletedAt  DateTime?  // soft delete
+
+  cart       Cart?
+  orders     Order[]
+  addresses  Address[]
+  deliveries Delivery[] @relation("DeliveryAgent")
+
+  @@index([deletedAt])
+}
+
+model Address {
+  id        String    @id @default(uuid())
+  label     String    // ex: "Maison", "Bureau"
+  street    String
+  city      String
+  latitude  Float?
+  longitude Float?
+  isDefault Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // soft delete
+
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+
+  orders    Order[]
+
+  @@index([deletedAt])
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  imageUrl  String?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // soft delete
+
+  dishes    Dish[]
+
+  @@index([deletedAt])
+}
+
+model Dish {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?
+  isAvailable Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?   // soft delete
+
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id])
+
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@index([deletedAt])
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  items     CartItem[]
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  quantity  Int      @default(1)
+  unitPrice Float    // capturé au moment de l'ajout
+  createdAt DateTime @default(now())
+
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+
+  dishId    String
+  dish      Dish     @relation(fields: [dishId], references: [id])
+
+  @@unique([cartId, dishId])
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  status      OrderStatus @default(PENDING)
+  totalAmount Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+
+  addressId   String
+  address     Address     @relation(fields: [addressId], references: [id])
+
+  items       OrderItem[]
+  payment     Payment?
+  delivery    Delivery?
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  quantity  Int
+  unitPrice Float    // figé au moment de la commande
+
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  dishId    String
+  dish      Dish     @relation(fields: [dishId], references: [id])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  amount        Float
+  method        PaymentMethod
+  status        PaymentStatus @default(PENDING)
+  transactionId String?       @unique
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  orderId       String        @unique
+  order         Order         @relation(fields: [orderId], references: [id])
+}
+
+model Delivery {
+  id            String    @id @default(uuid())
+  estimatedTime DateTime?
+  deliveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  orderId       String    @unique
+  order         Order     @relation(fields: [orderId], references: [id])
+
+  agentId       String?
+  agent         User?     @relation("DeliveryAgent", fields: [agentId], references: [id])
+}

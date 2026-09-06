@@ -1,0 +1,7 @@
+{
+  "name": "Julien's Food",
+  "description": "Application web de commande et livraison de nourriture pour Julien's Food à Douala — Catalogue premium, panier, paiement Stripe, suivi de commande en direct, espace livreur et dashboard d'administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
