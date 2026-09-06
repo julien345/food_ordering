@@ -1,0 +1,96 @@
+import bcrypt from "bcrypt";
+import authRepository from "./auth.repository";
+import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwt";
+import { ConflictError, UnauthorizedError, NotFoundError } from "../../errors";
+import { RegisterInput, UpdateProfileInput } from "../../validators/auth.validator";
+
+class AuthService {
+  async register(input: RegisterInput) {
+    const existingEmail = await authRepository.findByEmail(input.email);
+    if (existingEmail) throw new ConflictError("Cet email est déjà utilisé.");
+
+    if (input.phone) {
+      const existingPhone = await authRepository.phoneAlreadyExists(input.phone);
+      if (existingPhone) throw new ConflictError("Ce numéro de téléphone est déjà utilisé.");
+    }
+
+    const hashedPassword = await bcrypt.hash(input.password, 10);
+
+    const user = await authRepository.createUserWithCart({
+      email: input.email,
+      password: hashedPassword,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      phone: input.phone,
+    });
+
+    const accessToken = generateAccessToken({ userId: user.id, role: user.role });
+    const refreshToken = generateRefreshToken({ userId: user.id, role: user.role });
+
+    return {
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  async login(email: string, password: string) {
+    const user = await authRepository.findByEmail(email);
+    if (!user) throw new UnauthorizedError("Email ou mot de passe incorrect.");
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) throw new UnauthorizedError("Email ou mot de passe incorrect.");
+
+    const accessToken = generateAccessToken({ userId: user.id, role: user.role });
+    const refreshToken = generateRefreshToken({ userId: user.id, role: user.role });
+
+    return {
+      user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role },
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  async refresh(refreshToken: string) {
+    let payload;
+    try {
+      payload = verifyRefreshToken(refreshToken);
+    } catch {
+      throw new UnauthorizedError("Refresh token invalide ou expiré.");
+    }
+
+    const user = await authRepository.findById(payload.userId);
+    if (!user) throw new UnauthorizedError("Refresh token invalide ou expiré.");
+
+    const accessToken = generateAccessToken({ userId: user.id, role: user.role });
+    const newRefreshToken = generateRefreshToken({ userId: user.id, role: user.role });
+
+    return { accessToken, refreshToken: newRefreshToken };
+  }
+
+  async getProfile(userId: string) {
+    const user = await authRepository.findById(userId);
+    if (!user) throw new NotFoundError("Utilisateur introuvable.");
+
+    return {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+    };
+  }
+  // auth.service.ts — ajoute cette méthode à la classe existante
+async updateProfile(userId: string, data: UpdateProfileInput) {
+  if (data.phone) {
+    const existingPhone = await authRepository.phoneAlreadyExists(data.phone);
+    if (existingPhone && existingPhone.id !== userId) {
+      throw new ConflictError("Ce numéro de téléphone est déjà utilisé.");
+    }
+  }
+
+  return authRepository.updateProfile(userId, data);
+}
+}
+
+export default new AuthService();
